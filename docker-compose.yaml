@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  diarization:
+    build: .
+    container_name: diarization
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - CUDA_VISIBLE_DEVICES=0
+      - HUGGINGFACE_TOKEN=your_huggingface_token_here
+    volumes:
+      - ./input.wav:/app/input.wav
+      - ./output:/app/output
+    working_dir: /app
