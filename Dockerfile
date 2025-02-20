@@ -1,16 +1,19 @@
 # Use NVIDIA's official PyTorch image with CUDA support
-FROM nvidia/cuda:11.5.2-cudnn8-devel-ubuntu20.04
+# FROM nvidia/cuda:11.5.2-cudnn8-devel-ubuntu20.04
+FROM nvidia/cuda:11.7.1-cudnn8-devel-ubuntu22.04
 
 # Set environment variables for CUDA
 ENV CUDA_HOME=/usr/local/cuda
-ENV LD_LIBRARY_PATH=/usr/local/cuda/lib64:${LD_LIBRARY_PATH}
+ENV LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/local/cuda/extras/CUPTI/lib64:$LD_LIBRARY_PATH
 ENV PATH=/usr/local/cuda/bin:${PATH}
+ENV DEBIAN_FRONTEND=noninteractive
+
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     python3 python3-pip ffmpeg git wget \
     libffi-dev libstdc++6 libgomp1 libuuid1 \
-    ncurses-bin readline-common tk tzdata zlib1g \
+    ncurses-bin readline-common tk tzdata zlib1g libjpeg-dev libpng-dev \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Set Python alias
@@ -20,11 +23,14 @@ RUN ln -s /usr/bin/python3 /usr/bin/python
 RUN python3 -m pip install --no-cache-dir --upgrade pip setuptools wheel
 
 # Install PyTorch (compatible with CUDA 11.5)
-RUN pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu115
+RUN pip install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu117
+
 
 # Install Python dependencies from requirements.txt
 COPY requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir -r /app/requirements.txt
+# RUN pip install --no-cache-dir -r /app/requirements.txt
+RUN pip install --no-cache-dir --index-url https://pypi.org/simple -r /app/requirements.txt
+
 
 # Set working directory
 WORKDIR /app

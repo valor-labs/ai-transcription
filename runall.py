@@ -5,14 +5,21 @@ import csv
 import yaml
 import time
 import pprint
+from google.cloud import storage # Import for Cloud Storage
 from datetime import timedelta
 import argparse
 import numpy as np
 import pickle
 
 import torch
-torch.backends.cuda.matmul.allow_tf32 = True
+# torch.backends.cuda.matmul.allow_tf32 = True
+# Limit GPU memory usage to 75% (adjust as needed)
+torch.cuda.set_per_process_memory_fraction(0.75, 0)
 
+# Verify CUDA is accessible
+if not torch.cuda.is_available():
+    print("CUDA is not available! Ensure the container has GPU access.")
+    exit()
 
 start_time = time.time()
 
@@ -21,7 +28,7 @@ def elapsed():
 
 device = "cuda"
 audio_file = "./input/input.wav"
-batch_size = 2
+batch_size = 1
 compute_type = "float32" # "int8" # "float32"
 HF_TOKEN = os.getenv("HUGGINGFACE_TOKEN")
 

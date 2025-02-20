@@ -3,3 +3,4 @@ output
 model
 pyannote_env
 __pycache__
+.env

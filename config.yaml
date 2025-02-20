@@ -1,0 +1,8 @@
+project_id: transcriptionai  # User provides this
+region: us-central1             # User can customize
+bucket_name_prefix: transcription-bucket # Prefix for bucket name (makes it easier to generate unique names)
+service_name: transcription-service
+container_image_name: transcription-image # Name for the container image
+function_name: transcription-function # If using Cloud Functions
+huggingface_secret_name: huggingface-token # Name of the secret in Secret Manager
+# ... other parameters as needed

@@ -1,15 +1,17 @@
-version: '3.8'
 
 services:
   diarization:
     build: .
+    env_file:
+      - .env  # Load environment variables from .env file
     container_name: diarization
     runtime: nvidia
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
       - CUDA_VISIBLE_DEVICES=0
-      - HUGGINGFACE_TOKEN=your_huggingface_token_here
+      - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
     volumes:
-      - ./input.wav:/app/input.wav
-      - ./output:/app/output
+      - ./input:/app/input  # Mount input directory
+      - ./output:/app/output  # Mount output directory
+      - ./:/app/
     working_dir: /app
