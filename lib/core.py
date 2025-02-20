@@ -1,10 +1,7 @@
 import whisperx
-import gc
 import os
 import csv
 import yaml
-import time
-import pprint
 from datetime import timedelta
 import numpy as np
 import pickle

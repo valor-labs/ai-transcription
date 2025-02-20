@@ -4,3 +4,5 @@ model
 pyannote_env
 __pycache__
 .env
+env.tfvars
+terraform/.terraform*

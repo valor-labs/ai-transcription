@@ -1,45 +1,37 @@
-# Use NVIDIA's official PyTorch image with CUDA support
-# FROM nvidia/cuda:11.5.2-cudnn8-devel-ubuntu20.04
 FROM nvidia/cuda:11.7.1-cudnn8-devel-ubuntu22.04
 
-# Set environment variables for CUDA
 ENV CUDA_HOME=/usr/local/cuda
 ENV LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/local/cuda/extras/CUPTI/lib64:$LD_LIBRARY_PATH
 ENV PATH=/usr/local/cuda/bin:${PATH}
 ENV DEBIAN_FRONTEND=noninteractive
 
-
-# Install system dependencies
 RUN apt-get update && apt-get install -y \
     python3 python3-pip ffmpeg git wget \
     libffi-dev libstdc++6 libgomp1 libuuid1 \
     ncurses-bin readline-common tk tzdata zlib1g libjpeg-dev libpng-dev \
+    fuse gcsfuse \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Set Python alias
 RUN ln -s /usr/bin/python3 /usr/bin/python
 
-# Upgrade pip
 RUN python3 -m pip install --no-cache-dir --upgrade pip setuptools wheel
 
-# Install PyTorch (compatible with CUDA 11.5)
 RUN pip install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu117
 
-
-# Install Python dependencies from requirements.txt
 COPY requirements.txt /app/requirements.txt
-# RUN pip install --no-cache-dir -r /app/requirements.txt
+
 RUN pip install --no-cache-dir --index-url https://pypi.org/simple -r /app/requirements.txt
 
-
-# Set working directory
 WORKDIR /app
 
-# Copy the Python script
-COPY runall.py /app/runall.py
+COPY cli.py /app/cli.py
+COPY gcp-deployment.py /app/gcp-deployment.py
+COPY lib /app/lib
 
-# Expose ports (if you want to use it as an API)
+# Make sure the directory for mounting exists
+RUN mkdir -p /mnt/gcs-bucket
+
 EXPOSE 8000
 
-# Run the script
-CMD ["python", "runall.py"]
+CMD ["gcsfuse", "/mnt/gcs-buckets" ] && \
+    ["python", "cli.py", "--model-dir", "/mnt/gcs-bucket/model"]
