@@ -34,4 +34,4 @@ RUN mkdir -p /mnt/gcs-bucket
 EXPOSE 8000
 
 CMD ["gcsfuse", "/mnt/gcs-buckets" ] && \
-    ["python", "cli.py", "--model-dir", "/mnt/gcs-bucket/model"]
+    ["python", "src/cli.py"]
