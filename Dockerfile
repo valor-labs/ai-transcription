@@ -9,8 +9,19 @@ RUN apt-get update && apt-get install -y \
     python3 python3-pip ffmpeg git wget \
     libffi-dev libstdc++6 libgomp1 libuuid1 \
     ncurses-bin readline-common tk tzdata zlib1g libjpeg-dev libpng-dev \
-    fuse gcsfuse \
+    fuse \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Install lsb-core
+RUN apt update && \
+    DEBIAN_FRONTEND=noninteractive \
+    TZ=Americas/Los_Angeles \
+    apt install -y curl lsb-core
+
+RUN echo "deb https://packages.cloud.google.com/apt gcsfuse-$(lsb_release -c -s) main" | tee /etc/apt/sources.list.d/gcsfuse.list
+RUN curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -
+RUN apt-get update
+RUN yes | apt-get install fuse gcsfuse
 
 RUN ln -s /usr/bin/python3 /usr/bin/python
 
@@ -24,14 +35,12 @@ RUN pip install --no-cache-dir --index-url https://pypi.org/simple -r /app/requi
 
 WORKDIR /app
 
-COPY cli.py /app/cli.py
-COPY gcp-deployment.py /app/gcp-deployment.py
-COPY lib /app/lib
+COPY src/cli.py /app/cli.py
+COPY src/lib /app/lib
 
-# Make sure the directory for mounting exists
 RUN mkdir -p /mnt/gcs-bucket
 
 EXPOSE 8000
 
 CMD ["gcsfuse", "/mnt/gcs-buckets" ] && \
-    ["python", "src/cli.py"]
+    ["python", "cli.py"]

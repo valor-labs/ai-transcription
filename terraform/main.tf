@@ -9,13 +9,12 @@ terraform {
 
 provider "google" {
   project = var.project_id
-  region  = var.region
+  region  = var.local_region
 }
 
 locals {
   config = yamldecode(file("config.yaml"))
 }
-
 
 resource "google_project_service" "gcp_core_services" {
   for_each = toset([
@@ -24,9 +23,9 @@ resource "google_project_service" "gcp_core_services" {
   ])
   project = var.project_id
   service = each.key
-
-  disable_dependent_services=true 
+  disable_dependent_services = true 
 }
+
 resource "google_project_service" "gcp_services" {
   for_each = toset([
     "cloudresourcemanager.googleapis.com",
@@ -38,9 +37,7 @@ resource "google_project_service" "gcp_services" {
   ])
   project = var.project_id
   service = each.key
-
-  disable_dependent_services=true 
-
+  disable_dependent_services = true 
   depends_on = [ google_project_service.gcp_core_services ]
 }
 
@@ -50,11 +47,11 @@ resource "time_sleep" "wait_for_apis" {
 }
 
 
-module "storage" {
-  source = "./modules/storage"
-  region               = var.region
-  bucket_name_prefix = local.config.bucket_name_prefix
 
+module "storage" {
+  source             = "./modules/storage"
+  global_region      = var.global_region
+  bucket_name_prefix = local.config.bucket_name_prefix
   depends_on = [
     time_sleep.wait_for_apis, 
     module.iam
@@ -62,87 +59,77 @@ module "storage" {
 }
 
 module "iam" {
-  source = "./modules/iam"
+  source     = "./modules/iam"
   project_id = var.project_id
-
-  depends_on = [ time_sleep.wait_for_apis, ]
+  topic_new_file_name = var.topic_new_file_name
+  depends_on = [ time_sleep.wait_for_apis ]
 }
 
+module "pub_sub" {
+  source = "./modules/pub_sub"
+  project_id = var.project_id
+  input_bucket_name = module.storage.input_bucket_name
+  global_region = var.global_region
+  topic_new_file_name = var.topic_new_file_name
+
+  depends_on = [ module.storage ]
+}
 
 module "secrets" {
-  source = "./modules/secrets"
+  source                          = "./modules/secrets"
   cloud_run_service_account_email = module.iam.cloud_run_service_account_email
-  huggingface_token = var.huggingface_token
-
-  depends_on = [ time_sleep.wait_for_apis, ]
+  huggingface_token               = var.huggingface_token
+  depends_on                      = [ time_sleep.wait_for_apis ]
 }
 
-
-
-# Cloud Run module
 module "cloud_run" {
-  source = "./modules/cloud_run"
-  project_id = var.project_id
-  container_image_name = var.container_image_name
-  cloud_run_service_name = var.cloud_run_service_name
-  region     = var.region
-  image_tag = var.image_tag
-  repository_id = var.repository_id
-
+  source                                = "./modules/cloud_run"
+  project_id                            = var.project_id
+  container_image_name                  = var.container_image_name
+  cloud_run_service_name                = var.cloud_run_service_name
+  local_region                          = var.local_region
+  global_region                         = var.global_region
+  image_tag                             = var.image_tag
+  repository_name                       = var.repository_name
   cloud_run_template_service_account_email = module.iam.cloud_run_service_account_email
-  
-  input_bucket_name = module.storage.input_bucket_name
-  output_bucket_name = module.storage.output_bucket_name
-
+  input_bucket_name                     = module.storage.input_bucket_name
+  output_bucket_name                    = module.storage.output_bucket_name
   depends_on = [
-      module.storage,
-      module.iam,
-      time_sleep.wait_for_apis,
+    module.storage,
+    module.iam,
+    module.pub_sub,
+    time_sleep.wait_for_apis,
   ]
-
 }
 
 
+resource "google_pubsub_subscription" "cloud_run_subscription" {
+  name  = "cloud_run_subscription"
+  topic = module.pub_sub.input_file_topic.id
 
+  push_config {
+    push_endpoint = module.cloud_run.service_uri
+  }
 
-
-####### NOTIFICATIONS ##########
-
-data "google_storage_project_service_account" "gcs_account" {
-}
-
-resource "google_storage_notification" "notification" {
-  bucket        = module.storage.input_bucket_name
-  payload_format = "JSON_API_V1"
-
-  topic          = google_pubsub_topic.input_file_topic.id
-
-  event_types = ["OBJECT_FINALIZE"] # Trigger on file upload completion
-
-  depends_on = [ time_sleep.wait_for_apis, ]
-}
-
-resource "google_pubsub_topic_iam_binding" "binding" {
-  topic   = google_pubsub_topic.input_file_topic.id
-  role    = "roles/pubsub.publisher"
-  members = ["serviceAccount:${data.google_storage_project_service_account.gcs_account.email_address}"]
-
-  depends_on = [ time_sleep.wait_for_apis, ]
+  depends_on = [module.cloud_run, module.pub_sub, module.storage]
 }
 
 
-resource "google_pubsub_topic" "input_file_topic" {
-  name = "input_file_uploaded"
+resource "google_pubsub_topic_iam_member" "gcs_notification_publisher" {
+  topic = var.topic_new_file_name
+  role = "roles/pubsub.publisher"
+  member = "serviceAccount:${module.iam.cloud_run_service_account_email}"
 
-  depends_on = [ time_sleep.wait_for_apis, ]
+  depends_on = [ module.iam, module.pub_sub ]
 }
+
 
 resource "google_cloud_run_v2_service_iam_member" "run_invoker" {
-  name     = var.run_invoker_name
-  location = var.region
+  name     = var.cloud_run_service_name
+  location = var.global_region
   project  = var.project_id
   role     = "roles/run.invoker"
-  member   = "serviceAccount:${google_pubsub_topic.input_file_topic.id}"
+  member   = "serviceAccount:${module.iam.cloud_run_service_account_email}"
 
-  depends_on = [ time_sleep.wait_for_apis, ]
+  depends_on = [ module.iam, module.pub_sub, module.cloud_run ]
 }

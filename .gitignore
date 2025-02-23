@@ -8,3 +8,4 @@ env.tfvars
 terraform/.terraform*
 terraform/main.tf
 terraform/terraform.tfstate.backup
+debug/

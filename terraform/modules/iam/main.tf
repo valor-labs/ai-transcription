@@ -1,27 +1,16 @@
 variable "project_id" {}
+variable "topic_new_file_name" {}
 
-# Get the Cloud Run service account email
-data "google_project" "project" {
-}
-
-
-resource "google_project_iam_custom_role" "gcsfuse_role" {
-  role_id     = "gcsfuse_role"
-  title       = "GCS Fuse Role"
-  description = "Allows using gcsfuse to mount buckets"
+resource "google_project_iam_custom_role" "cloud_run_transcriptor_role" {
+  role_id     = "cloudRunTranscriptorRole"
+  title       = "Cloud Run Transcriptor Role"
+  description = "Role for Cloud Run service account to read input bucket and write to output bucket."
   permissions = [
     "storage.buckets.list",
     "storage.objects.get",
     "storage.objects.list",
-    "storage.objects.create" # Add this permission for writing
+    "storage.objects.create",
   ]
-}
-
-# Apply the gcsfuse role to the gcsfuse service account
-resource "google_project_iam_member" "gcsfuse_sa_binding" {
-  project = var.project_id
-  role    = "projects/${var.project_id}/roles/gcsfuse_role"
-  member  = "serviceAccount:${google_service_account.gcsfuse_sa.email}"
 }
 
 
@@ -30,20 +19,36 @@ resource "google_service_account" "cloud_run_sa" {
   display_name = "Cloud Run Service Account"
 }
 
-resource "google_service_account" "gcsfuse_sa" {
-  account_id   = "gcsfuse-sa"
-  display_name = "GCS Fuse Service Account"
+/* Bind the custom role to the Cloud Run service account */
+resource "google_project_iam_member" "cloud_run_sa_storage_binding" {
+  project = var.project_id
+  role    = "projects/${var.project_id}/roles/cloudRunTranscriptorRole"
+  member  = "serviceAccount:${google_service_account.cloud_run_sa.email}"
 }
 
-##### OUTPUTS
+/* Additional permissions for Pub/Sub access (if the service pulls messages) */
+resource "google_project_iam_member" "cloud_run_sa_pubsub_binding" {
+  project = var.project_id
+  role    = "roles/pubsub.subscriber"
+  member  = "serviceAccount:${google_service_account.cloud_run_sa.email}"
+}
+
+/* Grant Logging access */
+resource "google_project_iam_member" "cloud_run_sa_logging_binding" {
+  project = var.project_id
+  role    = "roles/logging.logWriter"
+  member  = "serviceAccount:${google_service_account.cloud_run_sa.email}"
+}
+
+resource "google_project_iam_member" "cloud_run_sa_artifact_registry_binding" {
+  project = var.project_id
+  role    = "roles/artifactregistry.reader"
+  member  = "serviceAccount:${google_service_account.cloud_run_sa.email}"
+}
+
+
 
 output "cloud_run_service_account_email" {
   value       = google_service_account.cloud_run_sa.email
   description = "The email of the service account used for Cloud Run"
-}
-
-
-output "gcsfuse_service_account_email" {
-  value       = google_service_account.gcsfuse_sa.email
-  description = "The email of the service account used for gcsfuse"
 }

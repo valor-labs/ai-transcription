@@ -10,28 +10,34 @@ variable "huggingface_token" {
 }
 
 
-variable "region" {
+variable "local_region" {
   type = string
   description = "The region to deploy the resources to"
   default = "europe-west4-b"
 }
 
+variable "global_region" {
+  type = string
+  description = "Region to create buckets. Must be same location as calc region"
+  default = "europe-west4"
+}
+
 variable "cloud_run_service_name" {
   type = string
   description = "Cloud run Service Account name"
-  default = "main_acc"
+  default = "main-service"
 }
 
 variable "container_image_name" {
   type = string
   description = "Name of the container's image"
-  default = "main_image"
+  default = "main-image"
 }
 
-variable "repository_id" {
+variable "repository_name" {
   type = string
-  description = "Container Repository ID"
-  default = "main_rep"
+  description = "Container Repository Name"
+  default = "main-rep"
 }
 
 variable "image_tag" {
@@ -40,8 +46,8 @@ variable "image_tag" {
   default = "latest"
 }
 
-variable "run_invoker_name" {
+variable "topic_new_file_name" {
   type = string
-  description = "Run invoker name"
-  default = "start_run_invoker"
+  description = "Pub/Sub topic that new file just created in the Input Bucket"
+  default = "input_file_uploaded"
 }

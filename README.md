@@ -22,8 +22,18 @@ cd terraform
 gcloud auth application-default login
 
 terraform init
-
+```
 create env.tfvars
 
+
+This authorizes Docker to push image to the cloud.
+
+```
+gcloud auth configure-docker europe-west4-docker.pkg.dev
+```
+
+Terraform plan - well, plans the enrollment.
+-var-file 
+```
 terraform plan -var-file="../env.tfvars"
 ```
