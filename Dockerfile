@@ -35,12 +35,12 @@ RUN pip install --no-cache-dir --index-url https://pypi.org/simple -r /app/requi
 
 WORKDIR /app
 
-COPY src/cli.py /app/cli.py
-COPY src/lib /app/lib
+COPY src_job/main.py /app/main.py
+COPY src_job/lib /app/lib
 
-RUN mkdir -p /mnt/gcs-bucket
+RUN mkdir -p /mnt/gcs-buckets
 
-EXPOSE 8000
+EXPOSE 8080
 
 CMD ["gcsfuse", "/mnt/gcs-buckets" ] && \
-    ["python", "cli.py"]
+    ["python", "main.py"]

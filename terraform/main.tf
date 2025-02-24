@@ -2,7 +2,11 @@ terraform {
   required_providers {
     google = {
       source  = "hashicorp/google"
-      version = "~> 5.0"
+      version = "~> 6.0"
+    }
+    google-beta = {
+      source  = "hashicorp/google-beta"
+      version = "~> 6.0"
     }
   }
 }
@@ -10,6 +14,11 @@ terraform {
 provider "google" {
   project = var.project_id
   region  = var.local_region
+}
+
+provider "google-beta" {
+  project = var.project_id
+  region  = var.local_region # Important: Beta provider also needs the region
 }
 
 locals {
@@ -68,11 +77,11 @@ module "iam" {
 module "pub_sub" {
   source = "./modules/pub_sub"
   project_id = var.project_id
-  input_bucket_name = module.storage.input_bucket_name
+  bucket_name_input = module.storage.bucket_name_input
   global_region = var.global_region
   topic_new_file_name = var.topic_new_file_name
 
-  depends_on = [ module.storage ]
+  depends_on = [ module.storage, module.iam ]
 }
 
 module "secrets" {
@@ -81,6 +90,7 @@ module "secrets" {
   huggingface_token               = var.huggingface_token
   depends_on                      = [ time_sleep.wait_for_apis ]
 }
+
 
 module "cloud_run" {
   source                                = "./modules/cloud_run"
@@ -92,8 +102,10 @@ module "cloud_run" {
   image_tag                             = var.image_tag
   repository_name                       = var.repository_name
   cloud_run_template_service_account_email = module.iam.cloud_run_service_account_email
-  input_bucket_name                     = module.storage.input_bucket_name
-  output_bucket_name                    = module.storage.output_bucket_name
+  bucket_name_input                     = module.storage.bucket_name_input
+  bucket_name_output                    = module.storage.bucket_name_output
+  bucket_name_model                     = module.storage.bucket_name_model
+
   depends_on = [
     module.storage,
     module.iam,
@@ -112,15 +124,6 @@ resource "google_pubsub_subscription" "cloud_run_subscription" {
   }
 
   depends_on = [module.cloud_run, module.pub_sub, module.storage]
-}
-
-
-resource "google_pubsub_topic_iam_member" "gcs_notification_publisher" {
-  topic = var.topic_new_file_name
-  role = "roles/pubsub.publisher"
-  member = "serviceAccount:${module.iam.cloud_run_service_account_email}"
-
-  depends_on = [ module.iam, module.pub_sub ]
 }
 
 

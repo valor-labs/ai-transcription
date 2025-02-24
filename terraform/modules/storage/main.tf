@@ -14,16 +14,27 @@ resource "google_storage_bucket" "output_bucket" {
   uniform_bucket_level_access = true
 }
 
+resource "google_storage_bucket" "model_bucket" {
+  name                        = "${var.bucket_name_prefix}-model-${random_id.suffix.hex}"
+  location                    = var.global_region
+  uniform_bucket_level_access = true
+}
+
 resource "random_id" "suffix" {
   byte_length = 8
 }
 
-output "input_bucket_name" {
+output "bucket_name_input" {
   value = google_storage_bucket.input_bucket.name
   description = "Bucket name for audio files"
 }
 
-output "output_bucket_name" {
+output "bucket_name_output" {
   value = google_storage_bucket.output_bucket.name
   description = "Bucket name for transcriptions"
+}
+
+output "bucket_name_model" {
+  value = google_storage_bucket.model_bucket.name
+  description = "Bucket name for keeping the model file"
 }

@@ -6,8 +6,9 @@ variable "image_tag" {}
 variable "container_image_name" {}
 variable "repository_name" {}
 
-variable "input_bucket_name" {}
-variable "output_bucket_name" {}
+variable "bucket_name_input" {}
+variable "bucket_name_output" {}
+variable "bucket_name_model" {}
 
 variable "cloud_run_template_service_account_email" {}
 
@@ -31,13 +32,30 @@ resource "null_resource" "build_and_push_image" {
 }
 
 resource "google_cloud_run_v2_service" "main" {
+  provider = google-beta
   name     = var.cloud_run_service_name
   location = var.global_region
+  launch_stage = "BETA"
 
   depends_on = [null_resource.build_and_push_image, google_artifact_registry_repository.repo ]
 
+
   template {
     service_account = var.cloud_run_template_service_account_email
+
+
+    # (Optional) Sets the maximum number of requests that each serving instance can receive.
+    # If not specified or 0, defaults to 80 when requested CPU >= 1 and defaults to 1 when requested CPU < 1.
+    max_instance_request_concurrency = 1
+
+    node_selector {
+      accelerator = "nvidia-l4"
+    }
+
+    scaling {
+      max_instance_count = 1
+      min_instance_count = 0
+    }        
 
     containers {
 
@@ -45,17 +63,31 @@ resource "google_cloud_run_v2_service" "main" {
 
       env {
         name  = "BUCKET1_NAME"
-        value = var.input_bucket_name # Pass the output from the storage module
+        value = var.bucket_name_input
       }
       env {
         name  = "BUCKET2_NAME"
-        value = var.output_bucket_name # Pass the output from the storage module
+        value = var.bucket_name_output
+      }
+
+      env {
+        name  = "BUCKET_MODEL"
+        value = var.bucket_name_model
+      }
+
+      resources {
+        limits = {
+          "cpu" = "4"
+          "memory" = "16Gi"
+          "nvidia.com/gpu" = "1"
+        }
+
       }
     }
 
-    volumes {
-      name = "gcs-mount"
-    }
+    # volumes {
+    #   name = "gcs-mount"
+    # }
   }
 }
 
