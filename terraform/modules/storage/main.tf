@@ -6,18 +6,21 @@ resource "google_storage_bucket" "input_bucket" {
   name                        = "${var.bucket_name_prefix}-input-${random_id.suffix.hex}"
   location                    = var.global_region
   uniform_bucket_level_access = true
+  force_destroy               = true
 }
 
 resource "google_storage_bucket" "output_bucket" {
   name                        = "${var.bucket_name_prefix}-output-${random_id.suffix.hex}"
   location                    = var.global_region
   uniform_bucket_level_access = true
+  force_destroy               = true
 }
 
 resource "google_storage_bucket" "model_bucket" {
   name                        = "${var.bucket_name_prefix}-model-${random_id.suffix.hex}"
   location                    = var.global_region
   uniform_bucket_level_access = true
+  force_destroy               = true
 }
 
 resource "random_id" "suffix" {

@@ -36,7 +36,7 @@ resource "google_cloud_run_v2_service" "main" {
   name     = var.cloud_run_service_name
   location = var.global_region
   launch_stage = "BETA"
-
+  deletion_protection=false
   depends_on = [null_resource.build_and_push_image, google_artifact_registry_repository.repo ]
 
 

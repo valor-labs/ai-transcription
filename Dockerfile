@@ -42,5 +42,4 @@ RUN mkdir -p /mnt/gcs-buckets
 
 EXPOSE 8080
 
-CMD ["gcsfuse", "/mnt/gcs-buckets" ] && \
-    ["python", "main.py"]
+CMD ["bash", "-c", "gcsfuse /mnt/gcs-buckets || exit 1; python main.py"]
