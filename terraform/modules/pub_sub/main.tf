@@ -33,6 +33,8 @@ resource "google_pubsub_topic_iam_binding" "binding" {
 }
 
 
+
+
 resource "google_pubsub_topic_iam_member" "gcs_notification_publisher" {
   topic = google_pubsub_topic.input_file_topic.id
   role = "roles/pubsub.publisher"

@@ -1,5 +1,6 @@
 import argparse
 import os
+import yaml
 from lib.core import TranscriptionCore
 import base64
 import json
@@ -9,16 +10,24 @@ app = Flask(__name__)
 
 counter = 0
 
+# Load configuration from config.yaml
+CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.yaml")
+with open(CONFIG_PATH, "r") as config_file:
+    config = yaml.safe_load(config_file)
+
+BUCKET_INPUT = config["bucket_name_input"]
+BUCKET_OUTPUT = config["bucket_name_output"]
+BUCKET_MODEL = config["bucket_name_model"]
+
 class TranscriptionService:
 
     def __init__(self):
-
         self.hf_token = os.getenv("HUGGINGFACE_TOKEN")
-        self.bucket1_name = os.environ.get("BUCKET1_NAME")
-        self.bucket2_name = os.environ.get("BUCKET2_NAME")
-        self.bucket_model_name = os.environ.get("BUCKET_MODEL")
+        self.bucket1_name = BUCKET_INPUT
+        self.bucket2_name = BUCKET_OUTPUT
+        self.bucket_model_name = BUCKET_MODEL
 
-        self.core = TranscriptionCore(hf_token=self.hf_token)
+        self.core = TranscriptionCore(hf_token=self.hf_token, model_dir=f"/app/buckets/{self.bucket_model_name}")
         self.core.load_models()
         
     def get_file_path_from_pubsub(self, event):
@@ -28,8 +37,7 @@ class TranscriptionService:
                 data = json.loads(data)
                 bucket_name = data['bucket']
                 file_name = data['name']
-                file_path = os.path.join('/mnt/gcs-buckets', bucket_name, file_name)
-                return file_path
+                return os.path.join('/app/buckets', bucket_name, file_name)
             else:
                 print("No data found in the Pub/Sub event.")
                 return None
@@ -48,40 +56,40 @@ class TranscriptionService:
         alignment_results = self.core.align(transcription_results, audio, skip_alignment=skip_alignment)
         diarization_results = self.core.diarize(audio, skip_diarization=skip_diarization)
         result = self.core.assign_speakers(diarization_results, alignment_results)
-        self.core.format_output(result)  # Assuming this saves the result somewhere accessible
-        return "Processing complete" # or return a more meaningful result if needed
 
-    def run(self, args=None, pubsub_event=None):  # Modified to accept pubsub_event
-        if pubsub_event:  # Check if called from Cloud Run with Pub/Sub event
+        # Construct output path with .txt extension in output bucket
+        filename = os.path.basename(audiofile)
+        output_path = os.path.join("/app/buckets", self.bucket2_name, f"{os.path.splitext(filename)[0]}.txt")
+        self.core.format_output(result, output_path)  # Save output in the correct bucket
+
+        return "Processing complete"
+
+    def run(self, args=None, pubsub_event=None):  
+        if pubsub_event:  
             audiofile = self.get_file_path_from_pubsub(pubsub_event)
             if audiofile is None:
                 raise ValueError("Could not retrieve file path from Pub/Sub event.")
-        elif args: #Check for local execution with args
+        elif args:  
             audiofile = args.audio_file
         else:
             raise ValueError("No input provided (neither Pub/Sub event nor audio file path).")
 
-
         return self.process_audio(audiofile, args.skip_whisper if args else False, args.skip_alignment if args else False, args.skip_diarization if args else False)
-
-
-
-
-
-
 
 
 @app.route('/', methods=['GET'])
 def health_check():
-    return "OK {counter}", 200
+    return f"OK {counter}", 200
 
 @app.route('/', methods=['POST'])
 def process_pubsub():
+    global counter
     counter += 1
     event = request.get_json()
     
     service = TranscriptionService()
     try:
+        print(event)
         result = service.run(pubsub_event=event)
         counter -= 1
         return jsonify({"message": result}), 200
@@ -93,21 +101,20 @@ def process_pubsub():
 
 if __name__ == "__main__":
 
-    ############################################ CLI mode
-    if os.getenv('K_SERVICE') is None:
-        parser = argparse.ArgumentParser(description="Run speaker diarization and Whisper transcription.")
-        parser.add_argument("--skip-whisper", action="store_true", help="Skip Whisperx transcription and load from YAML.")
-        parser.add_argument("--skip-alignment", action="store_true", help="Skip alignment and load from YAML.")
-        parser.add_argument("--skip-diarization", action="store_true", help="Skip diarization and load from YAML.")
-        parser.add_argument("--audio_file", type=str, default="./input/input.wav", help="Path to the audio file.")
-        args = parser.parse_args()
+    parser = argparse.ArgumentParser(description="Run speaker diarization and Whisper transcription.")
+    parser.add_argument("--server", action="store_true", help="Run in server mode.")
+    parser.add_argument("--skip-whisper", action="store_true", help="Skip Whisperx transcription and load from YAML.")
+    parser.add_argument("--skip-alignment", action="store_true", help="Skip alignment and load from YAML.")
+    parser.add_argument("--skip-diarization", action="store_true", help="Skip diarization and load from YAML.")
+    parser.add_argument("--audio_file", type=str, default="./input/input.wav", help="Path to the audio file.")
+    args = parser.parse_args()
+    
+    if args.server:
+        app.run(debug=True, host='0.0.0.0', port=int(os.environ.get('PORT', 8080)))  # Start flask if running in cloud run
 
+    else:
         service = TranscriptionService()
         try:
-          service.run(args=args) #run with args if running locally
+          service.run(args=args)
         except Exception as e:
-          print(f"An error occurred: {e}") #catch and print any errors during run.
-
-    ############################################ Web server mode
-    else:
-        app.run(debug=True, host='0.0.0.0', port=int(os.environ.get('PORT', 8080))) #start flask if running in cloud run
+          print(f"An error occurred: {e}")  # Catch and print any errors during run.

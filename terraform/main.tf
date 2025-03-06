@@ -22,7 +22,7 @@ provider "google-beta" {
 }
 
 locals {
-  config = yamldecode(file("config.yaml"))
+  config = yamldecode(file("../config.yaml"))
 }
 
 resource "google_project_service" "gcp_core_services" {
@@ -60,7 +60,11 @@ resource "time_sleep" "wait_for_apis" {
 module "storage" {
   source             = "./modules/storage"
   global_region      = var.global_region
-  bucket_name_prefix = local.config.bucket_name_prefix
+
+  bucket_name_input = local.config.bucket_name_input
+  bucket_name_output = local.config.bucket_name_output
+  bucket_name_model = local.config.bucket_name_model
+
   depends_on = [
     time_sleep.wait_for_apis, 
     module.iam

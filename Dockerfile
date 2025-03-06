@@ -37,9 +37,14 @@ WORKDIR /app
 
 COPY src_job/main.py /app/main.py
 COPY src_job/lib /app/lib
+COPY config.yaml /app/config.yaml
 
-RUN mkdir -p /mnt/gcs-buckets
+RUN mkdir -p /app/buckets
+# RUN chmod 777 /app/buckets
 
 EXPOSE 8080
 
-CMD ["bash", "-c", "gcsfuse /mnt/gcs-buckets || exit 1; python main.py"]
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+ENTRYPOINT ["/entrypoint.sh"]
