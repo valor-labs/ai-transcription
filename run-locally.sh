@@ -1,9 +1,13 @@
 #!/bin/bash
 
+set -e
+
 # Default values
 IMAGE_NAME="transcriptionai"
 CONTAINER_NAME="my-container"
-PORT_MAPPING="8080:8080"
+PORT="8080"
+PORT_MAPPING="$PORT:$PORT"
+
 
 # Parse command-line arguments
 while getopts i:c:p: flag
@@ -39,11 +43,29 @@ docker build -t $IMAGE_NAME .
 echo "🚀 Running new container..."
 docker run -d \
        -v ~/.config/gcloud:/root/.config/gcloud:ro \
+       --env-file .env \
        -p $PORT_MAPPING \
-       --gpus all \
+       --cpus="2" \
+       --cpu-shares=512 \
+       --memory="16g" \
+       --memory-swap="16g" \
+       --gpus "device=0" \
        --privileged --device /dev/fuse --cap-add SYS_ADMIN \
        --name $CONTAINER_NAME \
        $IMAGE_NAME
 
+# Wait for container to be ready
+echo "⏳ Waiting for container to be ready..."
+for i in {1..30}; do
+    if curl -s -o /dev/null -w "%{http_code}" http://localhost:$PORT | grep "200"; then
+        echo "✅ Container $CONTAINER_NAME is now running here: http://localhost:$PORT"
+        exit 0
+    fi
+    echo -n "🔄 Waiting... ($i/30)"
+    sleep 2
+    echo -ne "\r"
+done
 
-echo "✅ Container $CONTAINER_NAME is now running on port $PORT_MAPPING!"
+echo "❌ Container did not respond with HTTP 200 within the timeout period."
+docker logs $CONTAINER_NAME
+exit 1

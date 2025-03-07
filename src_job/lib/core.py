@@ -2,10 +2,12 @@ import whisperx
 import os
 import csv
 import yaml
-from datetime import timedelta
 import numpy as np
 import pickle
 import torch
+from datetime import timedelta
+
+from lib.logger import logger
 
 class TranscriptionCore:
     def __init__(self, device="cuda", compute_type="float32", hf_token=None, model_dir="./model/"):
@@ -18,34 +20,39 @@ class TranscriptionCore:
 
         # Verify CUDA is accessible
         if not torch.cuda.is_available():
-            print("CUDA is not available! Ensure the container has GPU access.")
+            logger.error("CUDA is not available! Ensure the container has GPU access.")
             exit()
 
         # Limit GPU memory usage (adjust as needed)
         torch.cuda.set_per_process_memory_fraction(0.75, 0)
 
     def load_models(self, model_name="turbo"):
+        logger.info(f"Loading models {model_name}, {self.device}, compute_type={self.compute_type}, download_root={self.model_dir}")
         self.model = whisperx.load_model(model_name, self.device, compute_type=self.compute_type, download_root=self.model_dir)
+        
+        logger.info("Starting DiarizationPipeline to assign speaker labels")
         self.diarize_model = whisperx.DiarizationPipeline(use_auth_token=self.hf_token, device=self.device)
 
     def transcribe(self, audio_file, batch_size=1, skip_whisper=False, whisper_path="./output/whisper_results.yaml"):
+        logger.info(f"Loading audio: {audio_file}")
         audio = whisperx.load_audio(audio_file)
 
         if skip_whisper and os.path.exists(whisper_path):
-            print("Skipping Whisper transcription, loading from YAML...")
+            logger.info("Skipping Whisper transcription, loading from YAML...")
             with open(whisper_path, "r") as f:
                 transcription_results = yaml.safe_load(f)
         else:
+            logger.info("Starting Transcribe...")
             transcription_results = self.model.transcribe(audio, batch_size=batch_size)
             with open(whisper_path, "w") as f:
                 yaml.dump(transcription_results, f, default_flow_style=False, sort_keys=False)
-            print(f"Whisper transcription saved to {whisper_path}")
+            logger.info(f"Whisper transcription saved to {whisper_path}")
 
         return transcription_results, audio
 
     def align(self, transcription_results, audio, skip_alignment=False, alignment_path="./output/whisperx_alignment.yaml"):
         if skip_alignment and os.path.exists(alignment_path):
-            print("Skipping alignment, loading from YAML...")
+            logger.info(f"Skipping alignment, loading from YAML...")
             with open(alignment_path, "r") as f:
                 alignment_results = yaml.safe_load(f)
         else:
@@ -54,26 +61,27 @@ class TranscriptionCore:
             alignment_results = self._convert_numpy(alignment_results) # Convert numpy arrays
             with open(alignment_path, "w") as f:
                 yaml.dump(alignment_results, f, default_flow_style=False, sort_keys=False)
-            print(f"Alignment serialized to {alignment_path}")
+            logger.info(f"Alignment serialized to {alignment_path}")
 
         return alignment_results
 
     def diarize(self, audio, skip_diarization=False, diarization_path="./output/diarization_results.bin"):
         if skip_diarization and os.path.exists(diarization_path):
-            print("Skipping diarization, loading from pickle...")
+            logger.info(f"Skipping diarization, loading from pickle...")
             with open(diarization_path, "rb") as f:
                 diarization_results = pickle.load(f)
         else:
             diarization_results = self.diarize_model(audio)
             with open(diarization_path, "wb") as f:
                 pickle.dump(diarization_results, f)
-            print(f"Diarization serialized to {diarization_path}")
+            logger.info(f"Diarization serialized to {diarization_path}")
         return diarization_results
 
     def assign_speakers(self, diarization_results, alignment_results):
         return whisperx.assign_word_speakers(diarization_results, alignment_results)
 
     def format_output(self, result, final_output_path="./output/transcription.csv"):
+        logger.info(f"Formatting output and saving to {final_output_path}")
         structured_output = []
         current_speaker = None
         current_start = None
@@ -109,7 +117,7 @@ class TranscriptionCore:
             writer.writerow(["Speaker", "Start", "End", "Speech"])
             writer.writerows(structured_output)
 
-        print(f"Transcription saved to {final_output_path}")
+        logger.info(f"Transcription saved to {final_output_path}")
 
     def _convert_numpy(self, obj):
         """ Recursively convert NumPy types to native Python types """

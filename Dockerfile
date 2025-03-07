@@ -35,9 +35,10 @@ RUN pip install --no-cache-dir --index-url https://pypi.org/simple -r /app/requi
 
 WORKDIR /app
 
-COPY src_job/main.py /app/main.py
+COPY src_job/*.py /app
 COPY src_job/lib /app/lib
 COPY config.yaml /app/config.yaml
+COPY ./.env /app/.env
 
 RUN mkdir -p /app/buckets
 # RUN chmod 777 /app/buckets
