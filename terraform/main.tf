@@ -125,6 +125,17 @@ resource "google_pubsub_subscription" "cloud_run_subscription" {
 
   push_config {
     push_endpoint = module.cloud_run.service_uri
+    oidc_token {
+      service_account_email = module.iam.cloud_run_service_account_email
+    }
+  }
+
+  message_retention_duration = "600s"
+
+  ack_deadline_seconds = 20
+
+  retry_policy {
+    minimum_backoff = "10s"
   }
 
   depends_on = [module.cloud_run, module.pub_sub, module.storage]
