@@ -81,37 +81,37 @@ class TranscriptionService:
     # Here is where everything starts
     def run(self, args=None, pubsub_event=None):  
         logger.info(f"Running processing, args: {args}, pubsub_event: {pubsub_event}")
-        if pubsub_event:  
-            audiofile, file_name = self.get_file_path_from_pubsub(pubsub_event)
-            if audiofile is None:
-                raise ValueError("Could not retrieve file path from Pub/Sub event.")
 
-            self.output_path = os.path.join('/app/buckets', self.bucket2_name, file_name)
-            
+        try:
+            if pubsub_event:  
+                audiofile, file_name = self.get_file_path_from_pubsub(pubsub_event)
+                if audiofile is None:
+                    raise ValueError("Could not retrieve file path from Pub/Sub event.")
 
-        elif args:  
-            audiofile = args.audio_file
-        else:
-            raise ValueError("No input provided (neither Pub/Sub event nor audio file path).")
+                self.output_path = os.path.join('/app/buckets', self.bucket2_name, file_name)
 
-        self.core.load_models()
-        self.process_audio(audiofile, args.skip_whisper if args else False, args.skip_alignment if args else False, args.skip_diarization if args else False)
-    
-    # Here is where work starts
-    def process_audio(self, audiofile, skip_whisper, skip_alignment, skip_diarization):
-        if not self.check_file_exists(audiofile):
-             raise FileNotFoundError(f"Audio file not found: {audiofile}")
+            elif args:  
+                audiofile = args.audio_file
+            else:
+                raise ValueError("No input provided (neither Pub/Sub event nor audio file path).")
 
-        transcription_results, audio = self.core.transcribe(audiofile, skip_whisper=skip_whisper, whisper_path=self.output_path+".transcr.yaml")
-        alignment_results = self.core.align(transcription_results, audio, skip_alignment=skip_alignment, alignment_path=self.output_path+".align.yaml")
-        diarization_results = self.core.diarize(audio, skip_diarization=skip_diarization, diarization_path=self.output_path+".diar.bin")
-        result = self.core.assign_speakers(diarization_results, alignment_results)
+            self.core.load_models()
 
-        # filename = os.path.basename(audiofile)
-        # output_path = os.path.join("/app/buckets", self.bucket2_name, f"{os.path.splitext(filename)[0]}.txt")
-        # self.core.format_output(result, output_path)  # Save output in the correct bucket
-        self.core.format_output(result, self.output_path+".txt")
+            if not self.check_file_exists(audiofile):
+                raise FileNotFoundError(f"Audio file not found: {audiofile}")
 
+            transcription_results, audio = self.core.transcribe(audiofile, skip_whisper=args.skip_whisper if args else False, whisper_path=self.output_path+".transcr.yaml")
+            alignment_results = self.core.align(transcription_results, audio, skip_alignment=args.skip_alignment if args else False, alignment_path=self.output_path+".align.yaml")
+            diarization_results = self.core.diarize(audio, skip_diarization=args.skip_diarization if args else False, diarization_path=self.output_path+".diar.bin")
+            result = self.core.assign_speakers(diarization_results, alignment_results)
+
+            # filename = os.path.basename(audiofile)
+            # output_path = os.path.join("/app/buckets", self.bucket2_name, f"{os.path.splitext(filename)[0]}.txt")
+            # self.core.format_output(result, output_path)  # Save output in the correct bucket
+            self.core.format_output(result, self.output_path+".txt")
+
+        finally:
+            self.core.release_memory()
 
 @app.route('/', methods=['GET'])
 def health_check():

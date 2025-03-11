@@ -130,3 +130,12 @@ class TranscriptionCore:
         elif isinstance(obj, dict):
             return {k: self._convert_numpy(v) for k, v in obj.items()}
         return obj
+    
+    def release_memory(self):
+        """Release memory after processing"""
+        if self.model:
+            del self.model
+        if self.diarize_model:
+            del self.diarize_model
+        torch.cuda.empty_cache()
+        logger.info("Memory released.")
