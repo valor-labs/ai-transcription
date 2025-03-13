@@ -8,7 +8,6 @@ CONTAINER_NAME="my-container"
 PORT="8080"
 PORT_MAPPING="$PORT:$PORT"
 
-
 # Parse command-line arguments
 while getopts i:c:p: flag
 do
@@ -19,11 +18,21 @@ do
     esac
 done
 
+# Apply Terraform to ensure storage buckets exist
+echo "📦 Ensuring required storage buckets created via Terraform..."
+cd ./terraform/
+if terraform apply -target=module.storage -var-file="../env.tfvars" -auto-approve; then
+    echo "✅ Terraform applied successfully."
+else
+    echo "❌ Terraform failed. Exiting."
+    exit 1
+fi
+cd ..
+
 echo "🚀 Rebuilding and rerunning Docker container..."
 echo "🛠  Image Name: $IMAGE_NAME"
 echo "📦 Container Name: $CONTAINER_NAME"
 echo "🌐 Port Mapping: $PORT_MAPPING"
-
 
 # Stop and remove existing container if it exists
 if docker ps -a --format '{{.Names}}' | grep -q "^$CONTAINER_NAME$"; then
@@ -35,9 +44,7 @@ fi
 
 # Rebuild the image
 echo "🔨 Building Docker image..."
-# docker build --no-cache -t $IMAGE_NAME .
 docker build -t $IMAGE_NAME .
-
 
 # Run the new container
 echo "🚀 Running new container..."
@@ -50,7 +57,8 @@ docker run -d \
        --memory="16g" \
        --memory-swap="16g" \
        --gpus "device=0" \
-       --privileged --device /dev/fuse --cap-add SYS_ADMIN \
+       --device /dev/fuse \
+       --cap-add SYS_ADMIN \
        --name $CONTAINER_NAME \
        $IMAGE_NAME
 
