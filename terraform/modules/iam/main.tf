@@ -3,7 +3,7 @@ variable "topic_new_file_name" {}
 
 resource "google_project_iam_custom_role" "cloud_run_transcriptor_role" {
   role_id     = "cloudRunTranscriptorRole"
-  title       = "Cloud Run Transcriptor Role"
+  title       = "Custom Role for CR Transcriptor"
   description = "Role for Cloud Run service account to read input bucket and write to output bucket."
   permissions = [
     "storage.buckets.list",
@@ -24,6 +24,8 @@ resource "google_project_iam_member" "cloud_run_sa_storage_binding" {
   project = var.project_id
   role    = "projects/${var.project_id}/roles/cloudRunTranscriptorRole"
   member  = "serviceAccount:${google_service_account.cloud_run_sa.email}"
+
+  depends_on = [ google_project_iam_custom_role.cloud_run_transcriptor_role, google_service_account.cloud_run_sa ]
 }
 
 /* Additional permissions for Pub/Sub access (if the service pulls messages) */

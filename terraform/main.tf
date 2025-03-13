@@ -41,7 +41,6 @@ resource "google_project_service" "gcp_services" {
     "run.googleapis.com",
     "artifactregistry.googleapis.com",
     "secretmanager.googleapis.com",
-    "storage.googleapis.com",
     "pubsub.googleapis.com",
   ])
   project = var.project_id
@@ -50,9 +49,20 @@ resource "google_project_service" "gcp_services" {
   depends_on = [ google_project_service.gcp_core_services ]
 }
 
+resource "google_project_service" "gcp_storage_services" {
+  for_each = toset([
+    "storage.googleapis.com",
+  ])
+  project = var.project_id
+  service = each.key
+  disable_dependent_services = true 
+  depends_on = [ google_project_service.gcp_core_services ]
+}
+
+
 resource "time_sleep" "wait_for_apis" {
   create_duration = "30s"
-  depends_on = [ google_project_service.gcp_services ]
+  depends_on = [ google_project_service.gcp_services, google_project_service.gcp_storage_services ]
 }
 
 
@@ -66,8 +76,7 @@ module "storage" {
   bucket_name_model = local.config.bucket_name_model
 
   depends_on = [
-    time_sleep.wait_for_apis, 
-    module.iam
+    google_project_service.gcp_storage_services
   ]
 }
 
@@ -150,4 +159,19 @@ resource "google_cloud_run_v2_service_iam_member" "run_invoker" {
   member   = "serviceAccount:${module.iam.cloud_run_service_account_email}"
 
   depends_on = [ module.iam, module.pub_sub, module.cloud_run ]
+}
+
+output "console_url_input_bucket" {
+  description = "URL of the Input bucket where you or upstream app places the audio file"
+  value = "https://console.cloud.google.com/storage/browser/${module.storage.bucket_name_input};tab=objects?forceOnBucketsSortingFiltering=true&inv=1&invt=AbrqpA&project=${var.project_id}"
+}
+
+output "console_url_output_bucket" {
+  description = "URL of the Output bucket where you or downstream app can take the transcription"
+  value = "https://console.cloud.google.com/storage/browser/${module.storage.bucket_name_output};tab=objects?forceOnBucketsSortingFiltering=true&inv=1&invt=AbrqpA&project=${var.project_id}"
+}
+
+output "console_url_cr_logs" {
+  description = "Cloud Run Logs"
+  value = "https://console.cloud.google.com/run/detail/${var.global_region}/${var.cloud_run_service_name}/logs?inv=1&invt=Abr6gg&project=${var.project_id}"
 }

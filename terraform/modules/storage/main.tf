@@ -26,10 +26,6 @@ resource "google_storage_bucket" "model_bucket" {
   force_destroy               = true
 }
 
-resource "random_id" "suffix" {
-  byte_length = 8
-}
-
 output "bucket_name_input" {
   value = google_storage_bucket.input_bucket.name
   description = "Bucket name for audio files"
