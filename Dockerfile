@@ -38,7 +38,6 @@ WORKDIR /app
 COPY src_job/*.py /app
 COPY src_job/lib /app/lib
 COPY config.yaml /app/config.yaml
-COPY ./.env /app/.env
 
 RUN mkdir -p /app/buckets
 # RUN chmod 777 /app/buckets

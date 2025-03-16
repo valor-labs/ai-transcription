@@ -100,7 +100,7 @@ module "pub_sub" {
 module "secrets" {
   source                          = "./modules/secrets"
   cloud_run_service_account_email = module.iam.cloud_run_service_account_email
-  huggingface_token               = var.huggingface_token
+  huggingface_token               = var.HUGGINGFACE_TOKEN
   depends_on                      = [ time_sleep.wait_for_apis ]
 }
 
@@ -118,11 +118,15 @@ module "cloud_run" {
   bucket_name_input                     = module.storage.bucket_name_input
   bucket_name_output                    = module.storage.bucket_name_output
   bucket_name_model                     = module.storage.bucket_name_model
+  huggingface_secret_id                 = module.secrets.huggingface_secret_id
+  gpu_memory                            = var.gpu_memory
+  gpu_type                              = var.gpu_type
 
   depends_on = [
     module.storage,
     module.iam,
     module.pub_sub,
+    module.secrets,
     time_sleep.wait_for_apis,
   ]
 }

@@ -10,12 +10,18 @@ from datetime import timedelta
 from lib.logger import logger
 
 class TranscriptionCore:
-    def __init__(self, device="cuda", compute_type="float32", hf_token=None, model_dir="./model/"):
+    def __init__(self, device="cuda", compute_type="float32", hf_token=None, model_dir="./model/", gpu_memory="6"):
+
         self.device = device
         self.compute_type = compute_type
+
+        logger.info(f"TranscriptionCore initialized with device={device}, compute_type={compute_type}, hf_token length is {len(hf_token)} (should be 37), model_dir={model_dir}")
+        
         self.hf_token = hf_token
+
         self.model_dir = model_dir
         self.model = None
+        
         self.diarize_model = None
 
         # Verify CUDA is accessible
@@ -23,17 +29,39 @@ class TranscriptionCore:
             logger.error("CUDA is not available! Ensure the container has GPU access.")
             exit()
 
-        # Limit GPU memory usage (adjust as needed)
-        torch.cuda.set_per_process_memory_fraction(0.75, 0)
+        logger.info(f"Setting GPU memory limit to {gpu_memory}GB")
+        if int(gpu_memory) > 6:
+            self.model_name = "large-v2"
+            self.batch_size = 8
+            self.threads = 4
+            torch.backends.cuda.matmul.allow_tf32 = True
+            torch.backends.cudnn.allow_tf32 = True
+            torch.cuda.set_per_process_memory_fraction(1.0, 0)
+        else:
+            self.model_name = "turbo"
+            self.batch_size = 1
+            self.threads = 4
+            torch.cuda.set_per_process_memory_fraction(0.75, 0)
+            
 
-    def load_models(self, model_name="turbo"):
-        logger.info(f"Loading models {model_name}, {self.device}, compute_type={self.compute_type}, download_root={self.model_dir}")
-        self.model = whisperx.load_model(model_name, self.device, compute_type=self.compute_type, download_root=self.model_dir)
+
+        logger.info(f"Model will be {self.model_name}, batch size {self.batch_size}")
+
+
+    def load_models(self):
+        logger.info(f"Loading models {self.model_name}, {self.device}, compute_type={self.compute_type}, download_root={self.model_dir}")
+        self.model = whisperx.load_model(self.model_name, self.device, compute_type=self.compute_type, download_root=self.model_dir, threads=self.threads)
         
         logger.info("Starting DiarizationPipeline to assign speaker labels")
-        self.diarize_model = whisperx.DiarizationPipeline(use_auth_token=self.hf_token, device=self.device)
+        try:
+            
+            self.diarize_model = whisperx.DiarizationPipeline(use_auth_token=self.hf_token, device=self.device)
+        except Exception as e:
+            logger.error(f"Error loading diarization model: {e}")
+            logger.error("Check if the Hugging Face token is valid and has access to the model.")
+            raise
 
-    def transcribe(self, audio_file, batch_size=1, skip_whisper=False, whisper_path="./output/whisper_results.yaml"):
+    def transcribe(self, audio_file, skip_whisper=False, whisper_path="./output/whisper_results.yaml"):
         logger.info(f"Loading audio: {audio_file}")
         audio = whisperx.load_audio(audio_file)
 
@@ -43,7 +71,7 @@ class TranscriptionCore:
                 transcription_results = yaml.safe_load(f)
         else:
             logger.info("Starting Transcribe...")
-            transcription_results = self.model.transcribe(audio, batch_size=batch_size)
+            transcription_results = self.model.transcribe(audio, batch_size=self.batch_size)
             with open(whisper_path, "w") as f:
                 yaml.dump(transcription_results, f, default_flow_style=False, sort_keys=False)
             logger.info(f"Whisper transcription saved to {whisper_path}")

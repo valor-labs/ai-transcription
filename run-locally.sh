@@ -21,7 +21,7 @@ done
 # Apply Terraform to ensure storage buckets exist
 echo "📦 Ensuring required storage buckets created via Terraform..."
 cd ./terraform/
-if terraform apply -target=module.storage -var-file="../env.tfvars" -auto-approve; then
+if terraform apply -target=module.storage -var-file="../.env" -auto-approve; then
     echo "✅ Terraform applied successfully."
 else
     echo "❌ Terraform failed. Exiting."

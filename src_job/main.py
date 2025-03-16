@@ -4,6 +4,10 @@ import yaml
 import base64
 import json
 import sys
+import pprint
+import threading
+import time
+import signal
 from lib.core import TranscriptionCore
 from lib.logger import logger
 from flask import Flask, request, jsonify, render_template_string
@@ -32,7 +36,7 @@ HTML_FORM = """
 <head><title>Test Transcription</title></head>
 <body>
     <h2>Test Transcription</h2>
-    <p>To test the solution manually, without using Terraform and Cloud Run:</p>
+    <p>To test the solution on local GPU:</p>
     <ol>
         <li>Create the following buckets: 
             {{ input_bucket }} {{ input_check }}, 
@@ -40,12 +44,13 @@ HTML_FORM = """
             {{ model_bucket }} {{ model_check }}
         </li>
         <li>Upload the file to the input bucket</li>
-        <li>Enter the file name here and press "Convert"</li>
+        <li>Enter the file name here and press the button</li>
+        <li>Copy and execute the generated CLI command to run HTTP request</li>
     </ol>
     <form action="/test" method="get">
-        <label for="filename">Filename:</label>
+        <label for="filename">Uploaded filename:</label>
         <input type="text" id="filename" name="filename" required>
-        <button type="submit">Convert</button>
+        <button type="submit">Generate CURL</button>
     </form>
 </body>
 </html>
@@ -54,12 +59,13 @@ HTML_FORM = """
 class TranscriptionService:
 
     def __init__(self):
-        self.hf_token = os.getenv("HUGGINGFACE_TOKEN")
+        self.hf_token = os.getenv("HUGGINGFACE_TOKEN").strip("\"") # strip fixes weird bug if imported from .env compatible with both terraform and local
+        self.gpu_memory = os.getenv("GPU_MEMORY") or "6"
         self.bucket1_name = BUCKET_INPUT
         self.bucket2_name = BUCKET_OUTPUT
         self.bucket_model_name = BUCKET_MODEL
 
-        self.core = TranscriptionCore(hf_token=self.hf_token, model_dir=f"/app/buckets/{self.bucket_model_name}")
+        self.core = TranscriptionCore(hf_token=self.hf_token, model_dir=f"/app/buckets/{self.bucket_model_name}", gpu_memory=self.gpu_memory)
         
         
     def get_file_path_from_pubsub(self, event):
@@ -120,7 +126,15 @@ def health_check():
 @app.route('/', methods=['POST'])
 def process_pubsub():
     global counter
+
+    if counter > 0:
+        return jsonify({"error": "Busy with other request"}), 429
+
     counter += 1
+    
+    # logger.debug(f"Request received, {request}")
+    pprint.pprint(request)
+
     event = request.get_json()
     logger.info(f"Received event: {event}")
 
@@ -128,11 +142,21 @@ def process_pubsub():
     try:
         service.run(pubsub_event=event)
         counter -= 1
+        
+        # add set timeout to return the result and then sys.exit(0)
+        
+        # def exit_after_delay():
+        #     logger.info("Gracefully shutting down the service in 5 seconds...")
+        #     time.sleep(5)
+        #     os.kill(os.getpid(), signal.SIGINT)
+        
+        # threading.Thread(target=exit_after_delay).start()
+
         return jsonify({"message": "Process complete"}), 200
     except Exception as e:
         counter -= 1
         logger.critical(f"An error occurred: {e}", exc_info=True)
-        # sys.exit(1)
+        sys.exit(1)
         return jsonify({"error": str(e)}), 500
 
 
@@ -175,6 +199,8 @@ def test_endpoint():
     cli_command = f"curl -X POST http://localhost:8080/ -H 'Content-Type: application/json' -d '{json.dumps(request_body)}'"
     
     return f"<pre>{cli_command}</pre>"
+
+
 
 if __name__ == "__main__":
 

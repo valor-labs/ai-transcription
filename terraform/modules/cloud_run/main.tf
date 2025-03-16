@@ -9,8 +9,11 @@ variable "repository_name" {}
 variable "bucket_name_input" {}
 variable "bucket_name_output" {}
 variable "bucket_name_model" {}
-
+variable "huggingface_secret_id" {} 
 variable "cloud_run_template_service_account_email" {}
+variable "gpu_type" {}
+variable "gpu_memory" {}
+  
 
 
 data "google_project" "current" {
@@ -49,7 +52,7 @@ resource "google_cloud_run_v2_service" "main" {
     max_instance_request_concurrency = 1
 
     node_selector {
-      accelerator = "nvidia-l4"
+      accelerator = var.gpu_type
     }
 
     scaling {
@@ -73,6 +76,21 @@ resource "google_cloud_run_v2_service" "main" {
       env {
         name  = "BUCKET_MODEL"
         value = var.bucket_name_model
+      }
+
+      env {
+        name  = "GPU_MEMORY"
+        value = var.gpu_memory
+      }
+
+      env {
+        name = "HUGGINGFACE_TOKEN"
+        value_source {
+          secret_key_ref {
+            secret = var.huggingface_secret_id
+            version = "latest"
+          }
+        }
       }
 
       resources {

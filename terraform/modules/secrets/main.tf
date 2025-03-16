@@ -19,3 +19,7 @@ resource "google_secret_manager_secret_version" "huggingface_secret_version" {
   secret = google_secret_manager_secret.huggingface_secret.id
   secret_data = var.huggingface_token
 }
+
+output "huggingface_secret_id" {
+  value = google_secret_manager_secret.huggingface_secret.id  
+}

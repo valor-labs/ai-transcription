@@ -4,7 +4,7 @@ variable "project_id" {
   default = "transcriptionai"
 }
 
-variable "huggingface_token" {
+variable "HUGGINGFACE_TOKEN" {
   type = string
   description = "Secret HuggingFace token"
 }
@@ -20,6 +20,19 @@ variable "global_region" {
   type = string
   description = "Region to create buckets. Must be same location as calc region"
   default = "europe-west4"
+}
+
+
+variable "gpu_type" {
+  type = string
+  description = "GPU type"
+  default = "nvidia-l4"
+}
+
+variable "gpu_memory" {
+  type = string
+  description = "GPU memory"
+  default = "16"
 }
 
 variable "cloud_run_service_name" {
