@@ -1,7 +1,7 @@
 
 # Core dependencies
 pip==25.0
-setuptools==75.8.0
+setuptools>=65.0,<75.0
 wheel==0.45.1
 
 # Pyannote and Whisper dependencies
@@ -32,6 +32,7 @@ einops==0.8.0
 faster-whisper==1.1.0
 filelock==3.17.0
 flatbuffers==25.1.24
+flask
 fonttools==4.55.8
 frozenlist==1.5.0
 fsspec==2025.2.0
@@ -126,5 +127,3 @@ tzdata==2025.1
 urllib3==2.3.0
 whisperx==3.3.1
 yarl==1.18.3
-
-

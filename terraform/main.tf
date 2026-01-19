@@ -1,0 +1,181 @@
+terraform {
+  required_providers {
+    google = {
+      source  = "hashicorp/google"
+      version = "~> 6.0"
+    }
+    google-beta = {
+      source  = "hashicorp/google-beta"
+      version = "~> 6.0"
+    }
+  }
+}
+
+provider "google" {
+  project = var.project_id
+  region  = var.local_region
+}
+
+provider "google-beta" {
+  project = var.project_id
+  region  = var.local_region # Important: Beta provider also needs the region
+}
+
+locals {
+  config = yamldecode(file("../config.yaml"))
+}
+
+resource "google_project_service" "gcp_core_services" {
+  for_each = toset([
+    "containerregistry.googleapis.com",
+    "cloudapis.googleapis.com",
+  ])
+  project = var.project_id
+  service = each.key
+  disable_dependent_services = true 
+}
+
+resource "google_project_service" "gcp_services" {
+  for_each = toset([
+    "cloudresourcemanager.googleapis.com",
+    "run.googleapis.com",
+    "artifactregistry.googleapis.com",
+    "secretmanager.googleapis.com",
+    "pubsub.googleapis.com",
+  ])
+  project = var.project_id
+  service = each.key
+  disable_dependent_services = true 
+  depends_on = [ google_project_service.gcp_core_services ]
+}
+
+resource "google_project_service" "gcp_storage_services" {
+  for_each = toset([
+    "storage.googleapis.com",
+  ])
+  project = var.project_id
+  service = each.key
+  disable_dependent_services = true 
+  depends_on = [ google_project_service.gcp_core_services ]
+}
+
+
+resource "time_sleep" "wait_for_apis" {
+  create_duration = "30s"
+  depends_on = [ google_project_service.gcp_services, google_project_service.gcp_storage_services ]
+}
+
+
+
+module "storage" {
+  source             = "./modules/storage"
+  global_region      = var.global_region
+
+  bucket_name_input = local.config.bucket_name_input
+  bucket_name_output = local.config.bucket_name_output
+  bucket_name_model = local.config.bucket_name_model
+
+  depends_on = [
+    google_project_service.gcp_storage_services
+  ]
+}
+
+module "iam" {
+  source     = "./modules/iam"
+  project_id = var.project_id
+  topic_new_file_name = var.topic_new_file_name
+  depends_on = [ time_sleep.wait_for_apis ]
+}
+
+module "pub_sub" {
+  source = "./modules/pub_sub"
+  project_id = var.project_id
+  bucket_name_input = module.storage.bucket_name_input
+  global_region = var.global_region
+  topic_new_file_name = var.topic_new_file_name
+
+  depends_on = [ module.storage, module.iam ]
+}
+
+module "secrets" {
+  source                          = "./modules/secrets"
+  cloud_run_service_account_email = module.iam.cloud_run_service_account_email
+  huggingface_token               = var.HUGGINGFACE_TOKEN
+  depends_on                      = [ time_sleep.wait_for_apis ]
+}
+
+
+module "cloud_run" {
+  source                                = "./modules/cloud_run"
+  project_id                            = var.project_id
+  container_image_name                  = var.container_image_name
+  cloud_run_service_name                = var.cloud_run_service_name
+  local_region                          = var.local_region
+  global_region                         = var.global_region
+  image_tag                             = var.image_tag
+  repository_name                       = var.repository_name
+  cloud_run_template_service_account_email = module.iam.cloud_run_service_account_email
+  bucket_name_input                     = module.storage.bucket_name_input
+  bucket_name_output                    = module.storage.bucket_name_output
+  bucket_name_model                     = module.storage.bucket_name_model
+  huggingface_secret_id                 = module.secrets.huggingface_secret_id
+  gpu_memory                            = var.gpu_memory
+  gpu_type                              = var.gpu_type
+
+  depends_on = [
+    module.storage,
+    module.iam,
+    module.pub_sub,
+    module.secrets,
+    time_sleep.wait_for_apis,
+  ]
+}
+
+
+resource "google_pubsub_subscription" "cloud_run_subscription" {
+  name  = "cloud_run_subscription"
+  topic = module.pub_sub.input_file_topic.id
+
+  push_config {
+    push_endpoint = module.cloud_run.service_uri
+    oidc_token {
+      service_account_email = module.iam.cloud_run_service_account_email
+    }
+  }
+
+  message_retention_duration = "600s"
+
+  ack_deadline_seconds = 20
+
+  retry_policy {
+    minimum_backoff = "10s"
+  }
+
+  depends_on = [module.cloud_run, module.pub_sub, module.storage]
+}
+
+
+resource "google_cloud_run_v2_service_iam_member" "run_invoker" {
+  name     = var.cloud_run_service_name
+  location = var.global_region
+  project  = var.project_id
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${module.iam.cloud_run_service_account_email}"
+
+  depends_on = [ module.iam, module.pub_sub, module.cloud_run ]
+}
+
+output "console_url_input_bucket" {
+  description = "URL of the Input bucket where you or upstream app places the audio file"
+  value = "https://console.cloud.google.com/storage/browser/${module.storage.bucket_name_input};tab=objects?forceOnBucketsSortingFiltering=true&inv=1&invt=AbrqpA&project=${var.project_id}"
+}
+
+output "console_url_output_bucket" {
+  description = "URL of the Output bucket where you or downstream app can take the transcription"
+  value = "https://console.cloud.google.com/storage/browser/${module.storage.bucket_name_output};tab=objects?forceOnBucketsSortingFiltering=true&inv=1&invt=AbrqpA&project=${var.project_id}"
+}
+
+output "console_url_cr_logs" {
+  description = "Cloud Run Logs"
+  value = "https://console.cloud.google.com/run/detail/${var.global_region}/${var.cloud_run_service_name}/logs?inv=1&invt=Abr6gg&project=${var.project_id}"
+}

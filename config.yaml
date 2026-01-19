@@ -1,0 +1,3 @@
+bucket_name_input: transcription-ai-12dfas13-input
+bucket_name_output: transcription-ai-12dfas13-output
+bucket_name_model: transcription-ai-12dfas13-model

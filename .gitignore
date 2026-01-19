@@ -3,3 +3,10 @@ output
 model
 pyannote_env
 __pycache__
+.env
+env.tfvars
+terraform/.terraform*
+terraform/main.tf
+terraform/terraform.tfstate
+terraform/terraform.tfstate.backup
+debug/
